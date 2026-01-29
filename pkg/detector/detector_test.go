@@ -846,6 +846,134 @@ func TestApplyPolicy(t *testing.T) {
 			resourceChangeByKarmada: false,
 			expectError:             false,
 		},
+		{
+			name: "both affinity and antiAffinity label exists",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": "default",
+						"uid":       "test-uid",
+						"labels": map[string]interface{}{
+							"affinityKey":     "affinityValue",
+							"antiAffinityKey": "antiAffinityValue",
+						},
+					},
+				},
+			},
+			policy: &policyv1alpha1.PropagationPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: policyv1alpha1.PropagationSpec{
+					Placement: policyv1alpha1.Placement{
+						WorkloadAffinity: &policyv1alpha1.WorkloadAffinity{
+							Affinity:     &policyv1alpha1.WorkloadAffinityTerm{GroupByLabelKey: "affinityKey"},
+							AntiAffinity: &policyv1alpha1.WorkloadAntiAffinityTerm{GroupByLabelKey: "antiAffinityKey"},
+						},
+					},
+				},
+			},
+			resourceChangeByKarmada: false,
+			expectError:             false,
+		},
+		{
+			name: "Only Affinity rule and label exists",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": "default",
+						"uid":       "test-uid",
+						"labels": map[string]interface{}{
+							"affinityKey": "affinityValue",
+						},
+					},
+				},
+			},
+			policy: &policyv1alpha1.PropagationPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: policyv1alpha1.PropagationSpec{
+					Placement: policyv1alpha1.Placement{
+						WorkloadAffinity: &policyv1alpha1.WorkloadAffinity{
+							Affinity: &policyv1alpha1.WorkloadAffinityTerm{GroupByLabelKey: "affinityKey"},
+						},
+					},
+				},
+			},
+			resourceChangeByKarmada: false,
+			expectError:             false,
+		},
+		{
+			name: "Only Anti Affinity rule and label exists",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": "default",
+						"uid":       "test-uid",
+						"labels": map[string]interface{}{
+							"antiAffinityKey": "antiAffinityValue",
+						},
+					},
+				},
+			},
+			policy: &policyv1alpha1.PropagationPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: policyv1alpha1.PropagationSpec{
+					Placement: policyv1alpha1.Placement{
+						WorkloadAffinity: &policyv1alpha1.WorkloadAffinity{
+							AntiAffinity: &policyv1alpha1.WorkloadAntiAffinityTerm{GroupByLabelKey: "antiAffinityKey"},
+						},
+					},
+				},
+			},
+			resourceChangeByKarmada: false,
+			expectError:             false,
+		},
+		{
+			name: "Affinity/AntiAffinity rule exists but label missing",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": "default",
+						"uid":       "test-uid",
+					},
+				},
+			},
+			policy: &policyv1alpha1.PropagationPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: policyv1alpha1.PropagationSpec{
+					Placement: policyv1alpha1.Placement{
+						WorkloadAffinity: &policyv1alpha1.WorkloadAffinity{
+							Affinity:     &policyv1alpha1.WorkloadAffinityTerm{GroupByLabelKey: "affinityKey"},
+							AntiAffinity: &policyv1alpha1.WorkloadAntiAffinityTerm{GroupByLabelKey: "antiAffinityKey"},
+						},
+					},
+				},
+			},
+			resourceChangeByKarmada: false,
+			expectError:             false,
+		},
 	}
 
 	for _, tt := range tests {
@@ -878,6 +1006,33 @@ func TestApplyPolicy(t *testing.T) {
 				}, binding)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.object.GetName(), binding.Spec.Resource.Name)
+				if tt.policy.Spec.Placement.WorkloadAffinity != nil {
+					if affinityTerm := tt.policy.Spec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
+						affinityKey := tt.policy.Spec.Placement.WorkloadAffinity.Affinity.GroupByLabelKey
+						if affinityValue, ok := tt.object.GetLabels()[affinityKey]; ok {
+							assert.Equal(t, fmt.Sprintf("%s=%s", affinityKey, affinityValue), binding.Spec.WorkloadAffinityGroups.AffinityGroup)
+						} else {
+							assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AffinityGroup)
+						}
+
+					} else {
+						assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AffinityGroup)
+					}
+
+					if antiAffinityTerm := tt.policy.Spec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
+						antiAffinityKey := tt.policy.Spec.Placement.WorkloadAffinity.AntiAffinity.GroupByLabelKey
+						if antiAffinityValue, ok := tt.object.GetLabels()[antiAffinityKey]; ok {
+							assert.Equal(t, fmt.Sprintf("%s=%s", antiAffinityKey, antiAffinityValue), binding.Spec.WorkloadAffinityGroups.AntiAffinityGroup)
+						} else {
+							assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AntiAffinityGroup)
+						}
+					} else {
+						assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AntiAffinityGroup)
+					}
+				} else {
+					var expectedWorkloadAffinityGroups *workv1alpha2.WorkloadAffinityGroups = nil
+					assert.Equal(t, expectedWorkloadAffinityGroups, binding.Spec.WorkloadAffinityGroups)
+				}
 			}
 		})
 	}
