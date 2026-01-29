@@ -804,13 +804,13 @@ func getWorkloadAffinityGroups(object *unstructured.Unstructured, policySpec *po
 
 	if affinityTerm := policySpec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
 		if affinityGroup, ok := objectLabels[affinityTerm.GroupByLabelKey]; ok {
-			workloadAffinityGroups.AffinityGroup = affinityGroup
+			workloadAffinityGroups.AffinityGroup = fmt.Sprintf("%s=%s", affinityTerm.GroupByLabelKey, affinityGroup)
 		}
 	}
 
 	if antiAffinityTerm := policySpec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
 		if antiAffinityGroup, ok := objectLabels[antiAffinityTerm.GroupByLabelKey]; ok {
-			workloadAffinityGroups.AntiAffinityGroup = antiAffinityGroup
+			workloadAffinityGroups.AntiAffinityGroup = fmt.Sprintf("%s=%s", antiAffinityTerm.GroupByLabelKey, antiAffinityGroup)
 		}
 	}
 	return workloadAffinityGroups
