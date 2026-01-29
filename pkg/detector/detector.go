@@ -793,6 +793,29 @@ func (d *ResourceDetector) ClaimClusterPolicyForObject(object *unstructured.Unst
 	return policyID, d.Client.Update(context.TODO(), object)
 }
 
+func getWorkloadAffinityGroups(object *unstructured.Unstructured, policySpec *policyv1alpha1.PropagationSpec, policyID string) *workv1alpha2.WorkloadAffinityGroups {
+	if policySpec.Placement.WorkloadAffinity == nil {
+		klog.V(4).Infof("WorkloadAffinity is not specified in policy %s for object %s/%s", policyID, object.GetNamespace(), object.GetName())
+		return nil
+	}
+
+	objectLabels := object.GetLabels()
+	workloadAffinityGroups := &workv1alpha2.WorkloadAffinityGroups{}
+
+	if affinityTerm := policySpec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
+		if affinityGroup, ok := objectLabels[affinityTerm.GroupByLabelKey]; ok {
+			workloadAffinityGroups.AffinityGroup = affinityGroup
+		}
+	}
+
+	if antiAffinityTerm := policySpec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
+		if antiAffinityGroup, ok := objectLabels[antiAffinityTerm.GroupByLabelKey]; ok {
+			workloadAffinityGroups.AntiAffinityGroup = antiAffinityGroup
+		}
+	}
+	return workloadAffinityGroups
+}
+
 // BuildResourceBinding builds a desired ResourceBinding for object.
 func (d *ResourceDetector) BuildResourceBinding(object *unstructured.Unstructured, policySpec *policyv1alpha1.PropagationSpec, policyID string, policyMeta metav1.ObjectMeta, claimFunc func(object metav1.Object, policyId string, objectMeta metav1.ObjectMeta)) (*workv1alpha2.ResourceBinding, error) {
 	bindingName := names.GenerateBindingName(object.GetKind(), object.GetName())
