@@ -816,6 +816,36 @@ func TestLookForMatchedClusterPolicy(t *testing.T) {
 	}
 }
 
+func verifyWorkloadAffinity(t *testing.T, object *unstructured.Unstructured, policySpec *policyv1alpha1.PropagationSpec, bindingSpec *workv1alpha2.ResourceBindingSpec) {
+	if policySpec.Placement.WorkloadAffinity != nil {
+		if affinityTerm := policySpec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
+			affinityKey := policySpec.Placement.WorkloadAffinity.Affinity.GroupByLabelKey
+			if affinityValue, ok := object.GetLabels()[affinityKey]; ok {
+				assert.Equal(t, fmt.Sprintf("%s=%s", affinityKey, affinityValue), bindingSpec.WorkloadAffinityGroups.AffinityGroup)
+			} else {
+				assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AffinityGroup)
+			}
+
+		} else {
+			assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AffinityGroup)
+		}
+
+		if antiAffinityTerm := policySpec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
+			antiAffinityKey := policySpec.Placement.WorkloadAffinity.AntiAffinity.GroupByLabelKey
+			if antiAffinityValue, ok := object.GetLabels()[antiAffinityKey]; ok {
+				assert.Equal(t, fmt.Sprintf("%s=%s", antiAffinityKey, antiAffinityValue), bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
+			} else {
+				assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
+			}
+		} else {
+			assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
+		}
+	} else {
+		var expectedWorkloadAffinityGroups *workv1alpha2.WorkloadAffinityGroups = nil
+		assert.Equal(t, expectedWorkloadAffinityGroups, bindingSpec.WorkloadAffinityGroups)
+	}
+}
+
 func TestApplyPolicy(t *testing.T) {
 	tests := []struct {
 		name                    string
@@ -1017,33 +1047,8 @@ func TestApplyPolicy(t *testing.T) {
 				}, binding)
 				assert.NoError(t, err)
 				assert.Equal(t, tt.object.GetName(), binding.Spec.Resource.Name)
-				if tt.policy.Spec.Placement.WorkloadAffinity != nil {
-					if affinityTerm := tt.policy.Spec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
-						affinityKey := tt.policy.Spec.Placement.WorkloadAffinity.Affinity.GroupByLabelKey
-						if affinityValue, ok := tt.object.GetLabels()[affinityKey]; ok {
-							assert.Equal(t, fmt.Sprintf("%s=%s", affinityKey, affinityValue), binding.Spec.WorkloadAffinityGroups.AffinityGroup)
-						} else {
-							assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AffinityGroup)
-						}
 
-					} else {
-						assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AffinityGroup)
-					}
-
-					if antiAffinityTerm := tt.policy.Spec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
-						antiAffinityKey := tt.policy.Spec.Placement.WorkloadAffinity.AntiAffinity.GroupByLabelKey
-						if antiAffinityValue, ok := tt.object.GetLabels()[antiAffinityKey]; ok {
-							assert.Equal(t, fmt.Sprintf("%s=%s", antiAffinityKey, antiAffinityValue), binding.Spec.WorkloadAffinityGroups.AntiAffinityGroup)
-						} else {
-							assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AntiAffinityGroup)
-						}
-					} else {
-						assert.Equal(t, "", binding.Spec.WorkloadAffinityGroups.AntiAffinityGroup)
-					}
-				} else {
-					var expectedWorkloadAffinityGroups *workv1alpha2.WorkloadAffinityGroups = nil
-					assert.Equal(t, expectedWorkloadAffinityGroups, binding.Spec.WorkloadAffinityGroups)
-				}
+				verifyWorkloadAffinity(t, tt.object, &tt.policy.Spec, &binding.Spec)
 			}
 		})
 	}
@@ -1055,6 +1060,7 @@ func TestApplyClusterPolicy(t *testing.T) {
 		policy                  *policyv1alpha1.ClusterPropagationPolicy
 		resourceChangeByKarmada bool
 		expectError             bool
+		enableWorkloadAffinity  bool
 	}{
 		{
 			name: "apply cluster policy for namespaced resource",
@@ -1077,6 +1083,7 @@ func TestApplyClusterPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  false,
 		},
 		{
 			name: "apply cluster policy for cluster-scoped resource",
@@ -1098,6 +1105,42 @@ func TestApplyClusterPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  false,
+		},
+		{
+			name: "both affinity and antiAffinity label exists",
+			object: &unstructured.Unstructured{
+				Object: map[string]interface{}{
+					"apiVersion": "apps/v1",
+					"kind":       "Deployment",
+					"metadata": map[string]interface{}{
+						"name":      "test-deployment",
+						"namespace": "default",
+						"uid":       "test-uid",
+						"labels": map[string]interface{}{
+							"affinityKey":     "affinityValue",
+							"antiAffinityKey": "antiAffinityValue",
+						},
+					},
+				},
+			},
+			policy: &policyv1alpha1.ClusterPropagationPolicy{
+				ObjectMeta: metav1.ObjectMeta{
+					Name:      "test-policy",
+					Namespace: "default",
+				},
+				Spec: policyv1alpha1.PropagationSpec{
+					Placement: policyv1alpha1.Placement{
+						WorkloadAffinity: &policyv1alpha1.WorkloadAffinity{
+							Affinity:     &policyv1alpha1.WorkloadAffinityTerm{GroupByLabelKey: "affinityKey"},
+							AntiAffinity: &policyv1alpha1.WorkloadAntiAffinityTerm{GroupByLabelKey: "antiAffinityKey"},
+						},
+					},
+				},
+			},
+			resourceChangeByKarmada: false,
+			expectError:             false,
+			enableWorkloadAffinity:  true,
 		},
 	}
 
@@ -1116,6 +1159,10 @@ func TestApplyClusterPolicy(t *testing.T) {
 				RESTMapper:          &mockRESTMapper{},
 			}
 
+			if err := features.FeatureGate.Set(fmt.Sprintf("%s=%v", features.WorkloadAffinity, tt.enableWorkloadAffinity)); err != nil {
+				t.Fatalf("Failed to set feature gate %s to %v: %v", features.WorkloadAffinity, tt.enableWorkloadAffinity, err)
+			}
+
 			err := d.ApplyClusterPolicy(tt.object, keys.ClusterWideKey{}, tt.resourceChangeByKarmada, tt.policy)
 
 			if tt.expectError {
@@ -1132,6 +1179,7 @@ func TestApplyClusterPolicy(t *testing.T) {
 					}, binding)
 					assert.NoError(t, err)
 					assert.Equal(t, tt.object.GetName(), binding.Spec.Resource.Name)
+					verifyWorkloadAffinity(t, tt.object, &tt.policy.Spec, &binding.Spec)
 				} else {
 					binding := &workv1alpha2.ClusterResourceBinding{}
 					err = fakeClient.Get(context.TODO(), client.ObjectKey{
@@ -1139,6 +1187,7 @@ func TestApplyClusterPolicy(t *testing.T) {
 					}, binding)
 					assert.NoError(t, err)
 					assert.Equal(t, tt.object.GetName(), binding.Spec.Resource.Name)
+					verifyWorkloadAffinity(t, tt.object, &tt.policy.Spec, &binding.Spec)
 				}
 			}
 		})
