@@ -24,6 +24,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/karmada-io/karmada/pkg/features"
 	"github.com/stretchr/testify/assert"
 	corev1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/meta"
@@ -822,6 +823,7 @@ func TestApplyPolicy(t *testing.T) {
 		policy                  *policyv1alpha1.PropagationPolicy
 		resourceChangeByKarmada bool
 		expectError             bool
+		enableWorkloadAffinity  bool
 	}{
 		{
 			name: "basic apply policy",
@@ -845,6 +847,7 @@ func TestApplyPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  false,
 		},
 		{
 			name: "both affinity and antiAffinity label exists",
@@ -879,6 +882,7 @@ func TestApplyPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  true,
 		},
 		{
 			name: "Only Affinity rule and label exists",
@@ -911,6 +915,7 @@ func TestApplyPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  true,
 		},
 		{
 			name: "Only Anti Affinity rule and label exists",
@@ -943,6 +948,7 @@ func TestApplyPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  true,
 		},
 		{
 			name: "Affinity/AntiAffinity rule exists but label missing",
@@ -973,6 +979,7 @@ func TestApplyPolicy(t *testing.T) {
 			},
 			resourceChangeByKarmada: false,
 			expectError:             false,
+			enableWorkloadAffinity:  true,
 		},
 	}
 
@@ -989,6 +996,10 @@ func TestApplyPolicy(t *testing.T) {
 				EventRecorder:       fakeRecorder,
 				ResourceInterpreter: &mockResourceInterpreter{},
 				RESTMapper:          &mockRESTMapper{},
+			}
+
+			if err := features.FeatureGate.Set(fmt.Sprintf("%s=%v", features.WorkloadAffinity, tt.enableWorkloadAffinity)); err != nil {
+				t.Fatalf("Failed to set feature gate %s to %v: %v", features.WorkloadAffinity, tt.enableWorkloadAffinity, err)
 			}
 
 			err := d.ApplyPolicy(tt.object, keys.ClusterWideKey{}, tt.resourceChangeByKarmada, tt.policy)
