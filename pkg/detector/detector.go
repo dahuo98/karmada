@@ -846,9 +846,10 @@ func (d *ResourceDetector) BuildResourceBinding(object *unstructured.Unstructure
 		},
 	}
 
-	//TODO: put feature gate here
-	affinityGroups := getWorkloadAffinityGroups(object, policySpec, policyID)
-	propagationBinding.Spec.WorkloadAffinityGroups = affinityGroups
+	if features.FeatureGate.Enabled(features.WorkloadAffinity) {
+		affinityGroups := getWorkloadAffinityGroups(object, policySpec, policyID)
+		propagationBinding.Spec.WorkloadAffinityGroups = affinityGroups
+	}
 
 	if policySpec.Suspension != nil {
 		propagationBinding.Spec.Suspension = &workv1alpha2.Suspension{Suspension: *policySpec.Suspension}
@@ -918,9 +919,10 @@ func (d *ResourceDetector) BuildClusterResourceBinding(object *unstructured.Unst
 		},
 	}
 
-	// TODO: put feature gate here
-	affinityGroups := getWorkloadAffinityGroups(object, policySpec, policyID)
-	binding.Spec.WorkloadAffinityGroups = affinityGroups
+	if features.FeatureGate.Enabled(features.WorkloadAffinity) {
+		affinityGroups := getWorkloadAffinityGroups(object, policySpec, policyID)
+		binding.Spec.WorkloadAffinityGroups = affinityGroups
+	}
 
 	if policySpec.Suspension != nil {
 		binding.Spec.Suspension = &workv1alpha2.Suspension{Suspension: *policySpec.Suspension}
