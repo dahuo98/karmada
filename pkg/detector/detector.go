@@ -852,8 +852,7 @@ func (d *ResourceDetector) BuildResourceBinding(object *unstructured.Unstructure
 	}
 
 	if features.FeatureGate.Enabled(features.WorkloadAffinity) {
-		affinityGroups := getWorkloadAffinityGroups(object, policySpec, policyID)
-		propagationBinding.Spec.WorkloadAffinityGroups = affinityGroups
+		propagationBinding.Spec.WorkloadAffinityGroups = getWorkloadAffinityGroups(object, policySpec, policyID)
 	}
 
 	if policySpec.Suspension != nil {
