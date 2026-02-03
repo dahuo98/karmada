@@ -793,6 +793,7 @@ func (d *ResourceDetector) ClaimClusterPolicyForObject(object *unstructured.Unst
 	return policyID, d.Client.Update(context.TODO(), object)
 }
 
+// getWorkloadAffinityGroups extracts workload affinity groups from the policy and object labels.
 func getWorkloadAffinityGroups(object *unstructured.Unstructured, policySpec *policyv1alpha1.PropagationSpec, policyID string) *workv1alpha2.WorkloadAffinityGroups {
 	if policySpec.Placement.WorkloadAffinity == nil {
 		klog.V(4).Infof("WorkloadAffinity is not specified in policy %s for object %s/%s", policyID, object.GetNamespace(), object.GetName())
@@ -812,6 +813,10 @@ func getWorkloadAffinityGroups(object *unstructured.Unstructured, policySpec *po
 		if antiAffinityGroup, ok := objectLabels[antiAffinityTerm.GroupByLabelKey]; ok {
 			workloadAffinityGroups.AntiAffinityGroup = fmt.Sprintf("%s=%s", antiAffinityTerm.GroupByLabelKey, antiAffinityGroup)
 		}
+	}
+
+	if workloadAffinityGroups.AffinityGroup == "" && workloadAffinityGroups.AntiAffinityGroup == "" {
+		return nil
 	}
 	return workloadAffinityGroups
 }

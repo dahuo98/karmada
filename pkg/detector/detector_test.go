@@ -817,33 +817,33 @@ func TestLookForMatchedClusterPolicy(t *testing.T) {
 }
 
 func verifyWorkloadAffinity(t *testing.T, object *unstructured.Unstructured, policySpec *policyv1alpha1.PropagationSpec, bindingSpec *workv1alpha2.ResourceBindingSpec) {
-	if policySpec.Placement.WorkloadAffinity != nil {
-		if affinityTerm := policySpec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
-			affinityKey := policySpec.Placement.WorkloadAffinity.Affinity.GroupByLabelKey
-			if affinityValue, ok := object.GetLabels()[affinityKey]; ok {
-				assert.Equal(t, fmt.Sprintf("%s=%s", affinityKey, affinityValue), bindingSpec.WorkloadAffinityGroups.AffinityGroup)
-			} else {
-				assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AffinityGroup)
-			}
-
-		} else {
-			assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AffinityGroup)
-		}
-
-		if antiAffinityTerm := policySpec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
-			antiAffinityKey := policySpec.Placement.WorkloadAffinity.AntiAffinity.GroupByLabelKey
-			if antiAffinityValue, ok := object.GetLabels()[antiAffinityKey]; ok {
-				assert.Equal(t, fmt.Sprintf("%s=%s", antiAffinityKey, antiAffinityValue), bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
-			} else {
-				assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
-			}
-		} else {
-			assert.Equal(t, "", bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
-		}
-	} else {
-		var expectedWorkloadAffinityGroups *workv1alpha2.WorkloadAffinityGroups = nil
-		assert.Equal(t, expectedWorkloadAffinityGroups, bindingSpec.WorkloadAffinityGroups)
+	if policySpec.Placement.WorkloadAffinity == nil {
+		assert.Nil(t, bindingSpec.WorkloadAffinityGroups)
+		return
 	}
+
+	expectedAffinityGroup := ""
+	if affinityTerm := policySpec.Placement.WorkloadAffinity.Affinity; affinityTerm != nil {
+		if affinityValue, ok := object.GetLabels()[affinityTerm.GroupByLabelKey]; ok {
+			expectedAffinityGroup = fmt.Sprintf("%s=%s", affinityTerm.GroupByLabelKey, affinityValue)
+		}
+	}
+
+	expectedAntiAffinityGroup := ""
+	if antiAffinityTerm := policySpec.Placement.WorkloadAffinity.AntiAffinity; antiAffinityTerm != nil {
+		if antiAffinityValue, ok := object.GetLabels()[antiAffinityTerm.GroupByLabelKey]; ok {
+			expectedAntiAffinityGroup = fmt.Sprintf("%s=%s", antiAffinityTerm.GroupByLabelKey, antiAffinityValue)
+		}
+	}
+
+	if expectedAffinityGroup == "" && expectedAntiAffinityGroup == "" {
+		assert.Nil(t, bindingSpec.WorkloadAffinityGroups)
+		return
+	}
+
+	assert.NotNil(t, bindingSpec.WorkloadAffinityGroups)
+	assert.Equal(t, expectedAffinityGroup, bindingSpec.WorkloadAffinityGroups.AffinityGroup)
+	assert.Equal(t, expectedAntiAffinityGroup, bindingSpec.WorkloadAffinityGroups.AntiAffinityGroup)
 }
 
 func TestApplyPolicy(t *testing.T) {
